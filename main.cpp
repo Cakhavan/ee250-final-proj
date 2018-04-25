@@ -62,7 +62,7 @@ extern "C" void mbed_reset();
 #define WIFI_HW_RESET_PIN       p26
 
 /* Using a hostname instead of IP address has been unverified by us */
-#define MQTT_BROKER_IPADDR      "128.125.124.160"  // eclipse.usc.edu == 128.125.124.160
+#define MQTT_BROKER_IPADDR      "eclipse.usc.edu"  // eclipse.usc.edu == 128.125.124.160
 #define MQTT_BROKER_PORT        11000
 
 /* turn on easy-connect debug prints */
@@ -76,13 +76,16 @@ DigitalOut wifiHwResetPin(WIFI_HW_RESET_PIN);
  *  move the robot for you. We provide a movement() function below for you to use
  */
 m3pi m3pi(p23, p9, p10);
+int state;
+int count=0;
+float buf[4];
 
 /* MQTTClient and TCPSocket (underneath MQTTNetwork) may not be thread safe. 
  * Lock this global mutex before any calls to publish(). 
  */
 Mutex mqttMtx;
 
-static char *topic = "m3pi-mqtt-ee250";
+static char *topic = "m3pi-mqtt-ee250/thread1";
 
 /**
  * @brief      controls movement of the 3pi
@@ -179,29 +182,138 @@ void messageArrived(MQTT::MessageData& md)
     }
 }
 
+
+
+
+void scan(){
+
+    movement('d', 25, 1600);
+
+
+
+
+}
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
 int main()
 {
+
+    /*
+    while (1)
+    {
+        ADCdata=Ain;
+        pc.printf("%f \n\r",ADCdata);
+        wait (0.5);
+    }
+
+    */
+//ADC STUFFFF
+    AnalogIn Ain(p20);
+    float ADCdata;
+    float distance;
+    //state machine
+    state=0;
+    //buffer incrementer
+    int a =0;
+    //flag which data point was farthest
+    int flag=0;
+    int regress = 0;
+    float max =0;
+     //scan
+    printf("begin\n");
+    while(1)
+    {
+        
+        if(state==0)
+        {
+            max=0;
+            flag=0;
+            a=0;
+            regress = 0;
+            while(count<=600)
+            {
+                 //ADCdata = V
+                    
+                ADCdata=Ain;
+                //0.0032 V per cm
+                //distance = cm
+                distance = ADCdata * 2.38 / 0.0032; 
+                buf[a]=distance;
+                a++;
+                printf("\n %d \n", a);
+
+                printf("Distance: %f \n\r",distance);
+                //increment sample rate
+                count+=300;
+                movement('d',22,count);
+
+            }
+
+            //find the largest distance and flag it
+            for(int i=0;i<3;i++)
+            {
+                if(max<buf[i])
+                {
+                    max=buf[i];
+                    flag=i;
+
+                }
+                printf("{%f YEEEt},\n",buf[i]);
+                printf("current max is: %f",max);
+           
+            }
+
+        
+            regress = flag * count;
+
+            printf("done");   
+            printf("check");
+            state=1;
+            count=0;
+            printf("this is the max value: %f",max);
+        
+        }                     
+       if(state==1)
+       {
+            printf("did you stop here");
+            movement('a',22,regress);
+            state=3;
+            printf("or hereee");
+       }
+       if(state==3)
+       {
+            while(1)
+            {
+                movement('w',50,500);
+                wait(3);
+                printf("or here");
+            }
+        }
+        
+
+    }
+
+
     /* Uncomment this to see how the m3pi moves. This sequence of functions
        represent w-a-s-d like controlling. Each button press moves the robot
        at a speed of 25 (speed can be between -127 to 127) for 100 ms. Use
        functions like this in your program to move your m3pi when you get 
        MQTT messages! */
-    // movement('w', 25, 100);
-    // movement('w', 25, 100);
-    // movement('w', 25, 100);
-    // movement('w', 25, 100);
-    // movement('a', 25, 100);
-    // movement('a', 25, 100);
-    // movement('a', 25, 100);
-    // movement('a', 25, 100);
-    // movement('d', 25, 100);
-    // movement('d', 25, 100);
-    // movement('d', 25, 100);
-    // movement('d', 25, 100);
-    // movement('s', 25, 100);
-    // movement('s', 25, 100);
-    // movement('s', 25, 100);
-    // movement('s', 25, 100);
+   
 
     wait(1); //delay startup 
     printf("Resetting ESP8266 Hardware...\n");
@@ -273,10 +385,12 @@ int main()
      have MQTTAsync, but some effort is needed to adapt mbed OS libraries to
      be used by the MQTTAsync library. Please do NOT do anything else in this
      thread. Let it serve as your background MQTT thread. */
+
+    
     while(1) {
         Thread::wait(1000);
-        printf("main: yielding...\n", client.isConnected());
 
+       
         if(!client.isConnected())
             mbed_reset(); //connection lost! software reset
 

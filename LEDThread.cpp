@@ -51,9 +51,15 @@
 
 Mail<MailMsg, LEDTHREAD_MAILBOX_SIZE> LEDMailbox;
 
+extern void movement(char command, char speed, int delta_t);
+
 static DigitalOut led2(LED2);
 
-static const char *topic = "m3pi-mqtt-ee250/led-thread";
+static const char *topic = "m3pi-mqtt-ee250/thread1";
+
+int state;
+int count=0;
+float buf[4];
 
 void LEDThread(void *args) 
 {
@@ -63,6 +69,92 @@ void LEDThread(void *args)
     osEvent evt;
     char pub_buf[16];
 
+    AnalogIn Ain(p20);
+    float ADCdata;
+    float distance;
+    //state machine
+    state=0;
+    //buffer incrementer
+    int a =0;
+    //flag which data point was farthest
+    int flag=0;
+    int regress = 0;
+    float max =0;
+     //scan
+    printf("begin\n");
+    while(1)
+    {
+        
+        if(state==0)
+        {
+            max=0;
+            flag=0;
+            a=0;
+            regress = 0;
+            while(count<=600)
+            {
+                 //ADCdata = V
+                    
+                ADCdata=Ain.read();
+                //0.0032 V per cm
+                //distance = cm
+                distance = ADCdata * 2.38 / 0.0032; 
+                buf[a]=distance;
+                a++;
+                printf("\n %d \n", a);
+
+                printf("Distance: %f \n\r",distance);
+                //increment sample rate
+                count+=300;
+                movement('d',22,count);
+
+            }
+
+            //find the largest distance and flag it
+            for(int i=0;i<3;i++)
+            {
+                if(max<buf[i])
+                {
+                    max=buf[i];
+                    flag=i;
+
+                }
+                printf("{%f YEEEt},\n",buf[i]);
+                printf("current max is: %f\n",max);
+           
+            }
+
+        
+            regress = flag * count;
+
+            printf("done");   
+            printf("check");
+            state=1;
+            count=0;
+            printf("this is the max value: %f",max);
+        
+        }                     
+       if(state==1)
+       {
+            printf("did you stop here");
+            movement('a',22,regress);
+            state=3;
+            printf("or hereee");
+       }
+       if(state==3)
+       {
+            while(1)
+            {
+                movement('w',50,500);
+                wait(3);
+                printf("or here");
+            }
+        }
+        
+
+    }
+
+
 
     while(1) {
 
@@ -70,12 +162,12 @@ void LEDThread(void *args)
 
         if(evt.status == osEventMail) {
             msg = (MailMsg *)evt.value.p;
-
+           
             /* the second byte in the message denotes the action type */
             switch (msg->content[1]) {
                 case LED_THR_PUBLISH_MSG:
                     printf("LEDThread: received command to publish to topic"
-                           "m3pi-mqtt-example/led-thread\n");
+                           "m3pi-mqtt-example/thread1\n");
                     pub_buf[0] = 'h';
                     pub_buf[1] = 'i';
                     message.qos = MQTT::QOS0;
