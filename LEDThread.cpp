@@ -85,8 +85,7 @@ void LEDThread(void *args)
     while(1)
     {
         
-        if(state==0)
-        {
+        if(state==0) {
             max=0;
             flag=0;
             a=0;
@@ -103,51 +102,47 @@ void LEDThread(void *args)
                 a++;
                 printf("\n %d \n", a);
 
-                printf("Distance: %f \n\r",distance);
+                printf("Distance: %f \n",distance);
                 //increment sample rate
                 count+=300;
                 movement('d',22,count);
 
-            }
+            } /* while */
 
-            //find the largest distance and flag it
-            for(int i=0;i<3;i++)
+            // find the largest distance and flag it 
+            for(int i = 0; i < 3; i++)
             {
-                if(max<buf[i])
-                {
+                if(max < buf[i]) {
                     max=buf[i];
                     flag=i;
-
                 }
                 printf("{%f YEEEt},\n",buf[i]);
                 printf("current max is: %f\n",max);
-           
-            }
+            } /* for */
 
-        
+            printf("done\n");   
+            printf("check\n");
+
             regress = flag * count;
-
-            printf("done");   
-            printf("check");
             state=1;
             count=0;
-            printf("this is the max value: %f",max);
+            printf("this is the max value: %f\n",max);
         
         }                     
-       if(state==1)
-       {
-            printf("did you stop here");
+        if(state==1)
+        {
+            printf("did you stop here\n");
             movement('a',22,regress);
             state=3;
-            printf("or hereee");
-       }
-       if(state==3)
-       {
+            printf("or hereee\n");
+        }
+        if(state==3)
+        {
             while(1)
             {
                 movement('w',50,500);
                 wait(3);
-                printf("or here");
+                printf("or here\n");
             }
         }
         
