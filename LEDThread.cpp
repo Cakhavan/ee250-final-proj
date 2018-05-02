@@ -59,7 +59,8 @@ static const char *topic = "m3pi-mqtt-ee250/thread1";
 
 int state;
 int count=0;
-float buf[4];
+float buf[125];
+float avgbuf[25];
 
 void LEDThread(void *args) 
 {
@@ -67,7 +68,7 @@ void LEDThread(void *args)
     MailMsg *msg;
     MQTT::Message message;
     osEvent evt;
-    char pub_buf[16];
+    char pub_buf[25];
 
     AnalogIn Ain(p20);
     float ADCdata;
@@ -79,11 +80,57 @@ void LEDThread(void *args)
     //flag which data point was farthest
     int flag=0;
     int regress = 0;
+    int tweak = 0;
     float max =0;
+    int babe = 0;
      //scan
-    printf("begin\n");
-    while(1)
+    printf("\nbegin\n");
+
+    
+    while(babe==0){
+        evt = LEDMailbox.get();
+
+        if(evt.status == osEventMail) {
+msg = (MailMsg *)evt.value.p;
+            if(msg->content[1] == 98){
+            babe=1;
+        }else if(msg->content[1] == 102){
+            babe=2;
+        }
+    }
+}
+label_name:
+    while(babe==1)
     {
+        evt = LEDMailbox.get();
+
+        if(evt.status == osEventMail) {
+msg = (MailMsg *)evt.value.p;
+            if(msg->content[1] == 98){
+            babe=1;
+        }else if(msg->content[1] == 102){
+            babe=2;
+        }
+
+        }
+                    pub_buf[0] = 's';
+                    pub_buf[1] = 'c';
+                    pub_buf[2] = 'a';
+                    pub_buf[3] = 'n';
+                    pub_buf[4] = 'n';
+                    pub_buf[5] = 'i';
+                    pub_buf[6] = 'n';
+                    pub_buf[7] = 'g';
+
+                    message.qos = MQTT::QOS0;
+                    message.retained = false;
+                    message.dup = false;
+                    message.payload = (void*)pub_buf;
+                    message.payloadlen = 10; //MQTTclient.h takes care of adding null char?
+                    /* Lock the global MQTT mutex before publishing */
+                    mqttMtx.lock();
+                    client->publish(topic, message);
+                    mqttMtx.unlock();    
         
         if(state==0) {
             max=0;
@@ -92,65 +139,229 @@ void LEDThread(void *args)
             regress = 0;
             while(count<=600)
             {
-                 //ADCdata = V
-                    
+                //120 iterations
+                count+=5; 
+
+                //read ADC data
                 ADCdata=Ain.read();
+
                 //0.0032 V per cm
                 //distance = cm
                 distance = ADCdata * 2.38 / 0.0032; 
-                buf[a]=distance;
-                a++;
-                printf("\n %d \n", a);
 
-                printf("Distance: %f \n",distance);
-                //increment sample rate
-                count+=300;
-                movement('d',22,count);
+                //store data
+                buf[a]=distance;
+                printf("Distance of %d: %f\n", a, buf[a]);
+                a++;
+
+                
+                //1 full turn
+                movement('d',10,30);
+                // if(buf[a]>45){
+                //     movement('s',30,200);
+                //     wait(.1)
+                // }
+            
+                
 
             } /* while */
 
-            // find the largest distance and flag it 
-            for(int i = 0; i < 3; i++)
+            printf("\ndone scanning\n"); 
+
+
+
+            a=1;    
+            max=0; 
+            // store buf into an avgbuf 
+            for(int i = 0; i < 25; i++)
             {
-                if(max < buf[i]) {
-                    max=buf[i];
-                    flag=i;
+                for(int j = 0 ; j < 5 ;j++){
+                   
+                    avgbuf[i] += buf[a];
+                    a++;
                 }
-                printf("{%f YEEEt},\n",buf[i]);
-                printf("current max is: %f\n",max);
-            } /* for */
+                avgbuf[i] = avgbuf[i] / 5;
+                printf("avg %d : %f",i,avgbuf[i]);
+                pub_buf[i]= avgbuf[i];
+                
+            }
 
-            printf("done\n");   
-            printf("check\n");
+             /* for */
 
-            regress = flag * count;
+                    pub_buf[0] = 'a';
+                    pub_buf[1] = 'v';
+                    pub_buf[2] = 'e';
+                    pub_buf[4] = 'r';
+                    pub_buf[5] = 'a';
+                    pub_buf[6] = 'g';
+                    pub_buf[7] = 'i';
+                    pub_buf[8] = 'n';
+                    pub_buf[9] = 'g';
+                   
+
+                    message.qos = MQTT::QOS0;
+                    message.retained = false;
+                    message.dup = false;
+                    message.payload = (void*)pub_buf;
+                    message.payloadlen = 10; //MQTTclient.h takes care of adding null char?
+                    /* Lock the global MQTT mutex before publishing */
+                    mqttMtx.lock();
+                    client->publish(topic, message);
+                    mqttMtx.unlock();
+            //find max avg
+            for(int i = 0; i < 25 ; i++){
+
+                if(max<avgbuf[i]){
+                    max = avgbuf[i];
+                    flag = i;
+                }
+
+            }
+
+            regress = count - (flag * 25);
+
             state=1;
-            count=0;
-            printf("this is the max value: %f\n",max);
-        
-        }                     
+            count=regress;
+
+            // printf("\nThe data array is: \n");
+            // for(int i=1; i<20; i++){
+            //     printf("\nElement_%d: %f\n",i,buf[i]);
+            // }
+            // printf("\nthis is the max value: %f\n",max);
+
+            // // mqttMtx.lock();
+            //         client->publish(topic, max);
+            // //         mqttMtx.unlock();
+        }
+                            
         if(state==1)
         {
-            printf("did you stop here\n");
-            movement('a',22,regress);
-            state=3;
-            printf("or hereee\n");
+            while(count>0){
+            //wait(.5);
+            
+            movement('a',10,30);
+        
+            count-=5;
+            //wait(.5);
+             }
         }
+            state=3;
+        
         if(state==3)
         {
-            while(1)
+            count=0;
+                     pub_buf[0] = 'm';
+                     pub_buf[1] = 'o';
+                     pub_buf[2] = 'v';
+                     pub_buf[4] = 'i';
+                     pub_buf[5] = 'n';
+                     pub_buf[6] = 'g';
+                     pub_buf[7] = ' ';
+                     pub_buf[8] = 'f';
+                     pub_buf[9] = 'o';
+                    pub_buf[10] = 'r';
+                    pub_buf[11] = 'w';
+                    pub_buf[12] = 'a';
+                    pub_buf[13] = 'r';
+                    pub_buf[14] = 'd';
+
+                    message.qos = MQTT::QOS0;
+                    message.retained = false;
+                    message.dup = false;
+                    message.payload = (void*)pub_buf;
+                    message.payloadlen = 15; //MQTTclient.h takes care of adding null char?
+                    /* Lock the global MQTT mutex before publishing */
+                    mqttMtx.lock();
+                    client->publish(topic, message);
+                    mqttMtx.unlock();
+            while(count<5)
             {
-                movement('w',50,500);
-                wait(3);
+                movement('s',15,200);
+                
                 printf("or here\n");
+                count++;
             }
+                    
+            state=0;
+            
         }
         
 
     }
 
 
+    //manual mode
+    while(babe==2){
 
+
+evt = LEDMailbox.get();
+
+        if(evt.status == osEventMail) {
+msg = (MailMsg *)evt.value.p;
+            if(msg->content[1] == 98){
+            babe=1;
+        }else if(msg->content[1] == 99){ //forward
+            movement('s',15,500);
+        }else if(msg->content[1] == 100){ //turn left
+            movement('a',15,200);
+        }else if(msg->content[1] == 101){ //turn right
+            movement('d',15,200);
+        }else if(msg->content[1] == 103){ //scan
+                    pub_buf[0] = 's';
+                    pub_buf[1] = 'c';
+                    pub_buf[2] = 'a';
+                    pub_buf[3] = 'n';
+                    pub_buf[4] = 'n';
+                    pub_buf[5] = 'i';
+                    pub_buf[6] = 'n';
+                    pub_buf[7] = 'g';
+
+                    message.qos = MQTT::QOS0;
+                    message.retained = false;
+                    message.dup = false;
+                    message.payload = (void*)pub_buf;
+                    message.payloadlen = 10; //MQTTclient.h takes care of adding null char?
+                    /* Lock the global MQTT mutex before publishing */
+                    mqttMtx.lock();
+                    client->publish(topic, message);
+                    mqttMtx.unlock();   
+
+                    count =0;
+                    while(count<=600)
+            {
+                //120 iterations
+                count+=5; 
+
+                //read ADC data
+                ADCdata=Ain.read();
+
+                //0.0032 V per cm
+                //distance = cm
+                distance = ADCdata * 2.38 / 0.0032; 
+
+                //store data
+                buf[a]=distance;
+                a++;
+
+                
+                //1 full turn
+                movement('d',10,30);
+            
+                //wait(.1);
+
+            } /* while */ 
+        }
+
+        }
+
+
+
+
+
+
+
+    }//while2
+goto label_name;
     while(1) {
 
         evt = LEDMailbox.get();
@@ -163,8 +374,8 @@ void LEDThread(void *args)
                 case LED_THR_PUBLISH_MSG:
                     printf("LEDThread: received command to publish to topic"
                            "m3pi-mqtt-example/thread1\n");
-                    pub_buf[0] = 'h';
-                    pub_buf[1] = 'i';
+                    pub_buf[0] = 'y';
+                    pub_buf[1] = 'o';
                     message.qos = MQTT::QOS0;
                     message.retained = false;
                     message.dup = false;

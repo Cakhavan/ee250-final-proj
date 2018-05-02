@@ -172,6 +172,18 @@ void messageArrived(MQTT::MessageData& md)
             msg->length = message.payloadlen;
             getLEDThreadMailbox()->put(msg);
             break;
+        case 97:
+            printf("Autopilot activated\n");
+            msg = getLEDThreadMailbox()->alloc();
+            if (!msg) {
+                printf("led thread mailbox full!\n");
+                break;
+            }
+            memcpy(msg->content, message.payload, message.payloadlen);
+            msg->length = message.payloadlen;
+            getLEDThreadMailbox()->put(msg);
+            break;
+
         default:
             /* do nothing */
             printf("Unknown MQTT message\n");
